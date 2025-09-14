@@ -1,2 +1,7 @@
 import { drizzle } from 'drizzle-orm/neon-http';
-const db = drizzle(process.env.DATABASE_URL!);
+import * as schema from '../../drizzle/schema';
+
+const db = drizzle(process.env.DATABASE_URL!, { schema });
+
+export { db };
+export * from '../../drizzle/schema';

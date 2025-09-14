@@ -4,6 +4,7 @@
     "": {
       "name": "recall",
       "dependencies": {
+        "@anthropic-ai/sdk": "^0.62.0",
         "@neondatabase/serverless": "^1.0.1",
         "@radix-ui/react-dropdown-menu": "^2.1.16",
         "clsx": "^2.1.1",
@@ -33,6 +34,8 @@
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
+
+    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.62.0", "", { "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-gT2VFKX0gSp7KJNlav/vzRFjJOPYDZxCJRx7MYUc+fqURc5aS6OI/UJeD2KytJkjsIWv0OOwH1ePc1S5QE2GZw=="],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 
