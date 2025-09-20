@@ -9,7 +9,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Trash2, Eye, ArrowUp, Plus, Brain } from "lucide-react";
+import {
+  MoreVertical,
+  Trash2,
+  Eye,
+  ArrowUp,
+  Plus,
+  Brain,
+  Loader2,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Question {
@@ -27,10 +35,10 @@ export default function ReviewCard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
-  const [showAnswer, setShowAnswer] = useState(false);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Restore persisted state on mount
   React.useEffect(() => {
@@ -138,6 +146,9 @@ export default function ReviewCard() {
         console.log("Note and question created:", result);
         setNoteContent("");
         setCurrentView("review");
+        setToastMessage("Note added successfully!");
+        // Clear toast after 3 seconds
+        setTimeout(() => setToastMessage(null), 3000);
         // Refresh questions after adding a new note
         await fetchDueQuestion();
       } else {
@@ -168,12 +179,9 @@ export default function ReviewCard() {
       if (response.ok) {
         const result = await response.json();
         setFlashMessage(result.explanation);
-        
+
         // Submit review with low quality score (1) since user wasn't sure
         await handleSubmitReview(1);
-        
-        // Clear flash message after 8 seconds
-        setTimeout(() => setFlashMessage(null), 8000);
       } else {
         console.error("Failed to get explanation");
       }
@@ -202,19 +210,16 @@ export default function ReviewCard() {
 
       if (response.ok) {
         const result = await response.json();
-        
+
         // Show feedback message
-        const feedbackMessage = result.isCorrect 
-          ? `Correct! ${result.feedback} We'll ask again in a bit to check your understanding.`
-          : `Not quite. ${result.feedback} We'll ask again in a bit to check your understanding.`;
-        
+        const feedbackMessage = result.isCorrect
+          ? `${result.feedback} We'll ask again in a bit to check your understanding.`
+          : `${result.feedback} We'll ask again in a bit to check your understanding.`;
+
         setFlashMessage(feedbackMessage);
-        
+
         // Submit review with AI-suggested quality
         await handleSubmitReview(result.suggestedQuality);
-        
-        // Clear flash message after 8 seconds
-        setTimeout(() => setFlashMessage(null), 8000);
       } else {
         console.error("Failed to evaluate answer");
       }
@@ -245,15 +250,18 @@ export default function ReviewCard() {
         const result = await response.json();
         console.log("Review submitted:", result);
         setAnswer("");
-        setShowAnswer(false);
-        // Fetch the next question
-        await fetchDueQuestion();
       } else {
         console.error("Failed to submit review");
       }
     } catch (error) {
       console.error("Error submitting review:", error);
     }
+  };
+
+  const handleGotIt = () => {
+    setFlashMessage(null);
+    setAnswer("");
+    fetchDueQuestion();
   };
 
   return (
@@ -267,7 +275,7 @@ export default function ReviewCard() {
       }}
     >
       <div className="absolute inset-0 bg-black/5 pointer-events-none" />
-      
+
       {/* Flash Message */}
       {flashMessage && (
         <motion.div
@@ -277,12 +285,23 @@ export default function ReviewCard() {
           className="absolute top-24 left-1/2 transform -translate-x-1/2 z-30 max-w-2xl mx-4"
         >
           <div className="px-6 py-4 bg-white/15 backdrop-blur-md rounded-xl border border-white/20 shadow-2xl">
-            <p className="text-white text-center leading-relaxed" style={{
-              fontFamily: "var(--font-playfair), Georgia, serif",
-              fontWeight: 300,
-            }}>
+            <p
+              className="text-white text-center leading-relaxed mb-4"
+              style={{
+                fontFamily: "var(--font-playfair), Georgia, serif",
+                fontWeight: 300,
+              }}
+            >
               {flashMessage}
             </p>
+            <div className="flex justify-center">
+              <button
+                onClick={handleGotIt}
+                className="px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20"
+              >
+                Got it!
+              </button>
+            </div>
           </div>
         </motion.div>
       )}
@@ -385,15 +404,18 @@ export default function ReviewCard() {
               fontWeight: 300,
             }}
           >
-            {currentView === "review" 
-              ? (isLoadingQuestion 
-                  ? "Loading question..." 
-                  : currentQuestion?.questionText || "No more questions for now")
+            {currentView === "review"
+              ? flashMessage
+                ? "Reviewing your answer..."
+                : isLoadingQuestion
+                ? "Loading question..."
+                : currentQuestion?.questionText || "No more questions for now"
               : "What's on your mind?"}
           </h2>
 
-          {/* Show textarea for add mode, or for review mode when there are questions */}
-          {(currentView === "add" || (currentView === "review" && currentQuestion)) && (
+          {/* Show textarea for add mode, or for review mode when there are questions and no flash message */}
+          {(currentView === "add" ||
+            (currentView === "review" && currentQuestion && !flashMessage)) && (
             <div className="relative max-w-3xl mx-auto">
               <Textarea
                 value={currentView === "review" ? answer : noteContent}
@@ -402,6 +424,16 @@ export default function ReviewCard() {
                     ? setAnswer(e.target.value)
                     : setNoteContent(e.target.value)
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (currentView === "review") {
+                      handleSubmitAnswer();
+                    } else {
+                      handleSubmitNote();
+                    }
+                  }
+                }}
                 placeholder={
                   currentView === "review"
                     ? "What should your answer be?"
@@ -433,26 +465,32 @@ export default function ReviewCard() {
                   disabled={isSubmitting || !noteContent.trim()}
                   className="absolute bottom-3 right-3 p-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-all group"
                 >
-                  <ArrowUp className="w-5 h-5 text-white group-hover:text-white transition-colors" />
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  ) : (
+                    <ArrowUp className="w-5 h-5 text-white group-hover:text-white transition-colors" />
+                  )}
                 </button>
               )}
             </div>
           )}
 
           {/* Show Add Note button when no questions are available */}
-          {currentView === "review" && !currentQuestion && !isLoadingQuestion && (
-            <div className="text-center">
-              <button
-                onClick={handleAddNote}
-                className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white font-light mx-auto"
-              >
-                <span>Add Note</span>
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {currentView === "review" &&
+            !currentQuestion &&
+            !isLoadingQuestion && (
+              <div className="text-center">
+                <button
+                  onClick={handleAddNote}
+                  className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white font-light mx-auto"
+                >
+                  <span>Add Note</span>
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
-          {currentView === "review" && currentQuestion && (
+          {currentView === "review" && currentQuestion && !flashMessage && (
             <div className="max-w-3xl mx-auto space-y-6">
               {/* Action Buttons */}
               <div className="flex justify-center gap-4">
@@ -463,7 +501,7 @@ export default function ReviewCard() {
                 >
                   {isLoadingExplanation ? "Loading..." : "I'm not sure"}
                 </button>
-                
+
                 <button
                   onClick={handleSubmitAnswer}
                   disabled={!answer.trim() || isEvaluating}
@@ -476,6 +514,35 @@ export default function ReviewCard() {
           )}
         </motion.div>
       </Card>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.8 }}
+          className="fixed bottom-6 right-6 z-50"
+        >
+          <div
+            className="px-6 py-4 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md"
+            style={{
+              backgroundColor: "rgba(255, 255, 255, 0.04)",
+              backdropFilter: "blur(30px) saturate(120%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            }}
+          >
+            <p
+              className="text-white text-center leading-relaxed"
+              style={{
+                fontFamily: "var(--font-playfair), Georgia, serif",
+                fontWeight: 300,
+              }}
+            >
+              {toastMessage}
+            </p>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
