@@ -15,13 +15,13 @@ const EVALUATION_PROMPT_TEMPLATE = (
 You asked them the following question to check their understanding: ${question}
 Here was their answer: ${answer}
 
-If they answered the question sufficiently, return a json containing {correct: True, message: <an encouraging message and let them know you'll ask again soon to check their understanding>}
+If they correctly answered the question, return a json containing {correct: True, message: <let them know you'll ask again soon to check their understanding>}
 
-If their response was mostly correct, return a json containing {correct: True, Message <Encouragement and a concise explanation on how they could improve for next time>
+If their response is mostly correct, but has mistakes, or is missing core ideas, return a json containing {correct: True, Message <a concise explanation on where they missed the mark>
 
 If their response failed to capture the underlying idea correctly, return a json containing {correct: False, Message: <Encouragement and a proper answer to the question>
 
-your encouragement should match what a college professor would say to a student. 
+Keep any encouragement concise, and not too enthusiastic
 
 only return the json object, no other text
 `;

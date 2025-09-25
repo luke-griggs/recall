@@ -14,6 +14,7 @@ import {
   Trash2,
   Eye,
   ArrowUp,
+  ChevronRight,
   Plus,
   Brain,
   Loader2,
@@ -27,20 +28,29 @@ type Note = {
   explanation?: string | null;
 };
 
+type Stage = "idle" | "loading" | "question" | "evaluation";
+
 export default function ReviewCard() {
   const [answer, setAnswer] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [currentView, setCurrentView] = useState<"review" | "add">("review");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
   const [reviewId, setReviewId] = useState<number | null>(null);
   const [questionText, setQuestionText] = useState("");
   const [questionAnimationKey, setQuestionAnimationKey] = useState(0);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
-  const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [evaluation, setEvaluation] = useState<{
+    message: string;
+    isCorrect: boolean;
+  } | null>(null);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [evaluationAnimationKey, setEvaluationAnimationKey] = useState(0);
 
   // Restore persisted state on mount
   useEffect(() => {
@@ -86,41 +96,49 @@ export default function ReviewCard() {
     return () => clearInterval(timer);
   }, []);
 
-  const resetReviewState = useCallback(() => {
+  const resetReviewState = useCallback((nextStage: Stage = "idle") => {
     setQuestionText("");
     setReviewId(null);
-    setFlashMessage(null);
+    setEvaluation(null);
+    setStatusMessage(null);
+    setStage(nextStage);
     setAnswer("");
   }, []);
 
   const fetchDueNote = useCallback(async () => {
-    if (currentView !== "review") return;
+    if (currentView !== "review") return null;
     try {
       const response = await fetch("/api/reviews/due");
       if (!response.ok) {
         console.error("Failed to fetch due note");
         setCurrentNote(null);
-        resetReviewState();
-        return;
+        setStatusMessage("We couldn't fetch the next note. Please try again.");
+        setStage("idle");
+        return null;
       }
 
       const result = await response.json();
-      setCurrentNote(result.note);
-      resetReviewState();
+      const note: Note | null = result.note ?? null;
+      setCurrentNote(note);
+      if (!note) {
+        setStatusMessage("Nothing due right now");
+        setStage("idle");
+      } else {
+        setStatusMessage(null);
+      }
+      return note;
     } catch (error) {
       console.error("Error fetching due note:", error);
       setCurrentNote(null);
-      resetReviewState();
+      setStatusMessage("We couldn't fetch the next note. Please try again.");
+      setStage("idle");
+      return null;
     }
-  }, [currentView, resetReviewState]);
+  }, [currentView]);
 
   useEffect(() => {
     fetchDueNote();
   }, [currentView, fetchDueNote]);
-
-  const handleForgetNote = () => {
-    console.log("Forgetting note...");
-  };
 
   const handleViewNote = () => {
     console.log("Viewing associated note...");
@@ -166,52 +184,73 @@ export default function ReviewCard() {
     }
   };
 
-  const startReviewSession = useCallback(async () => {
-    if (!currentNote || isLoadingQuestion) return;
+  const startReviewSession = useCallback(
+    async (noteOverride?: Note | null) => {
+      const targetNote = noteOverride ?? currentNote;
+      if (!targetNote || isLoadingQuestion) return;
 
-    setIsLoadingQuestion(true);
-    setQuestionText("");
-    setReviewId(null);
-    setFlashMessage(null);
-    setAnswer("");
+      setIsLoadingQuestion(true);
+      setStage("loading");
+      setEvaluation(null);
+      setStatusMessage(null);
+      setQuestionText("");
+      setReviewId(null);
+      setAnswer("");
 
-    try {
-      const response = await fetch("/api/reviews", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ noteId: currentNote.id }),
-      });
+      try {
+        const response = await fetch("/api/reviews", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ noteId: targetNote.id }),
+        });
 
-      if (!response.ok) {
-        console.error("Failed to start review session");
-        setFlashMessage("We couldn't generate a question. Please try again.");
-        return;
+        if (!response.ok) {
+          console.error("Failed to start review session");
+          setStatusMessage(
+            "We couldn't generate a question. Please try again."
+          );
+          return;
+        }
+
+        const result = await response.json();
+        if (!result?.question || !result?.reviewId) {
+          setStatusMessage(
+            "We couldn't generate a question. Please try again."
+          );
+          return;
+        }
+
+        setCurrentNote(targetNote);
+        setQuestionText(result.question);
+        setReviewId(result.reviewId);
+        setQuestionAnimationKey((prev) => prev + 1);
+        setStage("question");
+        setStatusMessage(null);
+      } catch (error) {
+        console.error("Error retrieving question:", error);
+        setStatusMessage("Something went wrong while generating the question.");
+      } finally {
+        setIsLoadingQuestion(false);
       }
-
-      const result = await response.json();
-      if (!result?.question || !result?.reviewId) {
-        setFlashMessage("We couldn't generate a question. Please try again.");
-        return;
-      }
-
-      setQuestionText(result.question);
-      setReviewId(result.reviewId);
-      setQuestionAnimationKey((prev) => prev + 1);
-    } catch (error) {
-      console.error("Error retrieving question:", error);
-      setFlashMessage("Something went wrong while generating the question.");
-    } finally {
-      setIsLoadingQuestion(false);
-    }
-  }, [currentNote, isLoadingQuestion]);
+    },
+    [
+      currentNote,
+      isLoadingQuestion,
+      setCurrentNote,
+      setQuestionText,
+      setReviewId,
+      setQuestionAnimationKey,
+      setStage,
+      setStatusMessage,
+      setEvaluation,
+      setAnswer,
+    ]
+  );
 
   const finalizeReview = useCallback(
-    async (
-      userAnswer: string,
-      options?: { suppressFeedback?: boolean }
-    ) => {
+    async (userAnswer: string, options?: { suppressFeedback?: boolean }) => {
       if (!reviewId) return;
       setIsEvaluating(true);
       try {
@@ -225,7 +264,7 @@ export default function ReviewCard() {
 
         if (!response.ok) {
           console.error("Failed to evaluate answer");
-          setFlashMessage("We couldn't grade that answer. Please try again.");
+          setStatusMessage("We couldn't grade that answer. Please try again.");
           return;
         }
 
@@ -234,18 +273,35 @@ export default function ReviewCard() {
 
         if (!options?.suppressFeedback) {
           const feedback = result?.evaluation?.feedback;
+          const isCorrect = Boolean(result?.evaluation?.isCorrect);
           if (feedback) {
-            setFlashMessage(feedback);
+            setEvaluation({
+              message: feedback,
+              isCorrect,
+            });
+            setEvaluationAnimationKey((prev) => prev + 1);
+            setStage("evaluation");
+            setStatusMessage(null);
+          } else {
+            setStatusMessage(
+              "We couldn't read the feedback. Please try again."
+            );
           }
         }
       } catch (error) {
         console.error("Error finalizing review:", error);
-        setFlashMessage("We couldn't grade that answer. Please try again.");
+        setStatusMessage("We couldn't grade that answer. Please try again.");
       } finally {
         setIsEvaluating(false);
       }
     },
-    [reviewId]
+    [
+      reviewId,
+      setStatusMessage,
+      setEvaluation,
+      setStage,
+      setEvaluationAnimationKey,
+    ]
   );
 
   const handleSubmitAnswer = async () => {
@@ -254,22 +310,84 @@ export default function ReviewCard() {
     setAnswer("");
   };
 
-  const handleGotIt = async () => {
-    setFlashMessage(null);
-    resetReviewState();
-    await fetchDueNote();
-  };
+  const goToNextQuestion = useCallback(async () => {
+    resetReviewState("loading");
+    setIsLoadingQuestion(true);
+    const nextNote = await fetchDueNote();
+    if (nextNote) {
+      await startReviewSession(nextNote);
+    } else {
+      setIsLoadingQuestion(false);
+    }
+  }, [
+    fetchDueNote,
+    resetReviewState,
+    setIsLoadingQuestion,
+    startReviewSession,
+  ]);
 
-  const reviewStatusLabel = useMemo(() => {
-    if (flashMessage) return "Review update";
-    if (isLoadingQuestion) return "Generating your next question...";
-    if (questionText) return "Current question";
-    if (currentNote) return "Ready to review";
-    return "Nothing due right now";
-  }, [flashMessage, isLoadingQuestion, questionText, currentNote]);
+  const handleNextQuestion = useCallback(async () => {
+    await goToNextQuestion();
+  }, [goToNextQuestion]);
+
+  const handleForgetNote = useCallback(async () => {
+    if (!currentNote || isDeletingNote || isLoadingQuestion) return;
+
+    setIsDeletingNote(true);
+    try {
+      const response = await fetch(`/api/notes/${currentNote.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        console.error("Failed to delete note");
+        setToastMessage("Failed to delete note. Please try again.");
+        setTimeout(() => setToastMessage(null), 3000);
+        return;
+      }
+
+      setCurrentNote(null);
+      setToastMessage("Note deleted successfully!");
+      setTimeout(() => setToastMessage(null), 3000);
+      await goToNextQuestion();
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      setToastMessage("Failed to delete note. Please try again.");
+      setTimeout(() => setToastMessage(null), 3000);
+    } finally {
+      setIsDeletingNote(false);
+    }
+  }, [currentNote, goToNextQuestion, isDeletingNote, isLoadingQuestion]);
+
+  const primaryLabel = useMemo(() => {
+    if (currentView === "add") {
+      return "What would you like to remember?";
+    }
+
+    if (stage === "evaluation" && evaluation) {
+      return evaluation.isCorrect ? "Great job" : "Review update";
+    }
+    if (stage === "loading" || isLoadingQuestion)
+      return "Generating your next question...";
+    if (stage === "question" && questionText) return "question";
+    if (currentNote) return "Ready to review?";
+    return statusMessage ?? "Nothing due right now";
+  }, [
+    currentView,
+    stage,
+    evaluation,
+    isLoadingQuestion,
+    questionText,
+    currentNote,
+    statusMessage,
+  ]);
 
   const showStartReviewButton = Boolean(
-    currentView === "review" && currentNote && !questionText && !isLoadingQuestion && !flashMessage
+    currentView === "review" &&
+      currentNote &&
+      stage === "idle" &&
+      !isLoadingQuestion &&
+      !evaluation
   );
 
   return (
@@ -282,46 +400,6 @@ export default function ReviewCard() {
         backgroundRepeat: "no-repeat",
       }}
     >
-      <div className="absolute inset-0 bg-black/5 pointer-events-none" />
-
-      {/* Flash Message */}
-      {flashMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="absolute top-24 left-1/2 transform -translate-x-1/2 z-30 max-w-2xl mx-4"
-        >
-          <div className="px-6 py-4 bg-white/15 backdrop-blur-md rounded-xl border border-white/20 shadow-2xl">
-            <p
-              className="text-white text-center leading-relaxed mb-4"
-              style={{
-                fontFamily: "var(--font-playfair), Georgia, serif",
-                fontWeight: 300,
-              }}
-            >
-              {flashMessage}
-            </p>
-            <div className="flex justify-center">
-              <button
-                onClick={handleGotIt}
-                className="px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20"
-              >
-                Got it!
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-20">
-        <div className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors backdrop-blur-sm border border-white/10">
-          <span className="text-white font-medium text-base">
-            {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString()}
-          </span>
-        </div>
-      </div>
-
       <Card
         className="relative z-10 w-full max-w-5xl rounded-2xl border border-white/10 p-12 shadow-2xl"
         style={{
@@ -405,56 +483,68 @@ export default function ReviewCard() {
           className="space-y-8"
         >
           <div className="flex flex-col items-center gap-2 mt-12">
-            <span className="text-sm uppercase tracking-[0.3em] text-white/60">{reviewStatusLabel}</span>
+            <span className="text-md uppercase tracking-[0.2em] text-white/60">
+              {primaryLabel}
+            </span>
             {currentView === "review" ? (
-              <motion.h2
-                key={questionAnimationKey}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className="text-2xl font-light text-white text-center"
-                style={{
-                  fontFamily: "var(--font-playfair), Georgia, serif",
-                  fontWeight: 300,
-                }}
-              >
-                {questionText
-                  ? questionText
-                  : currentNote
-                  ? isLoadingQuestion
-                    ? "Generating your next question..."
-                    : "Press Start Review when you're ready"
-                  : "No notes are due for review"}
-              </motion.h2>
-            ) : (
-              <h2
-                className="text-2xl font-light text-white text-center"
-                style={{
-                  fontFamily: "var(--font-playfair), Georgia, serif",
-                  fontWeight: 300,
-                }}
-              >
-                What would you like to remember?
-              </h2>
-            )}
+              stage === "evaluation" && evaluation ? (
+                <motion.div
+                  key={`evaluation-${evaluationAnimationKey}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="text-white/90 text-lg leading-relaxed text-center max-w-3xl"
+                  style={{
+                    fontFamily: "var(--font-playfair), Georgia, serif",
+                    fontWeight: 300,
+                  }}
+                >
+                  {evaluation.message}
+                </motion.div>
+              ) : (
+                <motion.h2
+                  key={`question-${questionAnimationKey}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="text-2xl font-light text-white text-center"
+                  style={{
+                    fontFamily: "var(--font-playfair), Georgia, serif",
+                    fontWeight: 300,
+                  }}
+                >
+                  {stage === "question" && questionText
+                    ? questionText
+                    : statusMessage
+                    ? statusMessage
+                    : currentNote
+                    ? stage === "loading" || isLoadingQuestion
+                      ? null
+                      : null
+                    : "No notes are due for review"}
+                </motion.h2>
+              )
+            ) : null}
           </div>
 
-          {/* Start Review Button */}
+          {/* Begin Review Button */}
           {showStartReviewButton && (
             <div className="flex justify-center">
               <button
-                onClick={startReviewSession}
-                className="flex items-center gap-3 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20"
+                onClick={() => startReviewSession()}
+                className="group flex items-center gap-3 px-6 py-3 bg-white/5 hover:bg-white/8 rounded-full tracking-[0.1em] text-white/60 transition-colors border border-white/20"
               >
-                <Sparkles className="w-4 h-4" />
-                Start Review
+                Click here
+                <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1 mt-0.5" />
               </button>
             </div>
           )}
 
           {/* Textarea for add mode, or for active question */}
           {(currentView === "add" ||
-            (currentView === "review" && questionText && !flashMessage)) && (
+            (currentView === "review" &&
+              stage === "question" &&
+              questionText)) && (
             <div className="relative max-w-3xl mx-auto">
               <Textarea
                 value={currentView === "review" ? answer : noteContent}
@@ -480,7 +570,7 @@ export default function ReviewCard() {
                 }
                 disabled={
                   currentView === "review" &&
-                  (!!flashMessage || isLoadingQuestion || !questionText)
+                  (stage !== "question" || isLoadingQuestion || !questionText)
                 }
                 className={`resize-none bg-white/4 text-white rounded-xl placeholder:text-white/70 text-lg ${
                   currentView === "review" ? "min-h-[150px]" : "min-h-[250px]"
@@ -522,7 +612,8 @@ export default function ReviewCard() {
           {currentView === "review" &&
             !currentNote &&
             !questionText &&
-            !isLoadingQuestion && (
+            !isLoadingQuestion &&
+            stage === "idle" && (
               <div className="text-center">
                 <button
                   onClick={handleAddNote}
@@ -534,7 +625,7 @@ export default function ReviewCard() {
               </div>
             )}
 
-          {currentView === "review" && questionText && !flashMessage && (
+          {currentView === "review" && questionText && stage === "question" && (
             <div className="max-w-3xl mx-auto space-y-6">
               <div className="flex justify-center gap-4">
                 <button
@@ -545,6 +636,18 @@ export default function ReviewCard() {
                   {isEvaluating ? "Checking..." : "Submit Answer"}
                 </button>
               </div>
+            </div>
+          )}
+
+          {currentView === "review" && stage === "evaluation" && evaluation && (
+            <div className="max-w-3xl mx-auto flex justify-center">
+              <button
+                onClick={handleNextQuestion}
+                className="group flex items-center gap-2 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20 text-sm uppercase tracking-[0.2em]"
+              >
+                Next question
+                <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
+              </button>
             </div>
           )}
         </motion.div>

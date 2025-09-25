@@ -10,7 +10,7 @@ const QUESTION_PROMPT_TEMPLATE = (noteContent: string) => `You are a kind profes
 
 It's a few days later and we'd like to check if they still remember the conclusion they drew. Can you provide a question that their conclusion might've been the answer to?
 
-The ultimate goal is to see if the user can explain the underlying concept in their conclusion
+The ultimate goal is to see if the user can explain the underlying concept in their conclusion so no "yes/no" questions.
 
 Please return the question only with no other text`;
 
