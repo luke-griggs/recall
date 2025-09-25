@@ -1,6 +1,6 @@
 {
-  "id": "00000000-0000-0000-0000-000000000000",
-  "prevId": "",
+  "id": "3f4d7d5a-de8c-42e9-a6ae-67e616c1b260",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -51,77 +51,9 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "valid_status": {
-          "name": "valid_status",
-          "value": "(status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying, 'archived'::character varying])::text[])"
-        }
-      },
-      "policies": {},
-      "isRLSEnabled": false
-    },
-    "public.questions": {
-      "name": "questions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
         },
-        "note_id": {
-          "name": "note_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "question_text": {
-          "name": "question_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_answer": {
-          "name": "expected_answer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "question_type": {
-          "name": "question_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'recall'"
-        },
-        "generated_by_model": {
-          "name": "generated_by_model",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "generation_prompt": {
-          "name": "generation_prompt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "generated_at": {
-          "name": "generated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "next_review_date": {
-          "name": "next_review_date",
+        "next_review_at": {
+          "name": "next_review_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false,
@@ -155,48 +87,24 @@
           "notNull": false,
           "default": 0
         },
-        "status": {
-          "name": "status",
-          "type": "varchar(20)",
+        "last_reviewed_at": {
+          "name": "last_reviewed_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'active'"
+          "notNull": false
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "questions_note_id_fkey": {
-          "name": "questions_note_id_fkey",
-          "tableFrom": "questions",
-          "tableTo": "notes",
-          "schemaTo": "public",
-          "columnsFrom": [
-            "note_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
+      "policies": {},
       "checkConstraints": {
-        "valid_easiness_factor": {
-          "name": "valid_easiness_factor",
-          "value": "easiness_factor >= 1.30"
-        },
         "valid_status": {
           "name": "valid_status",
           "value": "(status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying, 'archived'::character varying])::text[])"
-        },
-        "valid_question_type": {
-          "name": "valid_question_type",
-          "value": "(question_type)::text = ANY ((ARRAY['recall'::character varying, 'multiple_choice'::character varying, 'fill_blank'::character varying, 'true_false'::character varying, 'application'::character varying, 'conceptual'::character varying])::text[])"
         }
       },
-      "policies": {},
       "isRLSEnabled": false
     },
     "public.reviews": {
@@ -209,28 +117,70 @@
           "primaryKey": true,
           "notNull": true
         },
-        "question_id": {
-          "name": "question_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "note_id": {
           "name": "note_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "reviewed_at": {
-          "name": "reviewed_at",
+        "generated_at": {
+          "name": "generated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
         },
-        "user_response": {
-          "name": "user_response",
+        "question_text": {
+          "name": "question_text",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected_answer": {
+          "name": "expected_answer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model_rubric": {
+          "name": "model_rubric",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "model_name": {
+          "name": "model_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_prompt": {
+          "name": "generation_prompt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_answer": {
+          "name": "user_answer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "answered_at": {
+          "name": "answered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evaluation_feedback": {
+          "name": "evaluation_feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quality": {
+          "name": "quality",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -267,25 +217,10 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "reviews_question_id_fkey": {
-          "name": "reviews_question_id_fkey",
-          "tableFrom": "reviews",
-          "tableTo": "questions",
-          "schemaTo": "public",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "reviews_note_id_fkey": {
-          "name": "reviews_note_id_fkey",
+        "reviews_note_id_notes_id_fk": {
+          "name": "reviews_note_id_notes_id_fk",
           "tableFrom": "reviews",
           "tableTo": "notes",
-          "schemaTo": "public",
           "columnsFrom": [
             "note_id"
           ],
@@ -298,8 +233,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
@@ -310,21 +245,8 @@
   "policies": {},
   "views": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
-  },
-  "internal": {
-    "tables": {
-      "notes": {
-        "columns": {
-          "tags": {
-            "isArray": true,
-            "dimensions": 1,
-            "rawType": "character varying(255)"
-          }
-        }
-      }
-    }
+    "tables": {}
   }
 }

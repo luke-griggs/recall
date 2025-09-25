@@ -1,117 +1,80 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db, reviews, questions } from "@/db";
-import { eq } from "drizzle-orm";
-import type { InferInsertModel } from "drizzle-orm";
+import { NextRequest, NextResponse } from 'next/server';
+import Groq from 'groq-sdk';
+import { db, notes, reviews } from '@/db';
+import { eq } from 'drizzle-orm';
 
-type ReviewInsert = InferInsertModel<typeof reviews>;
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+const MODEL_NAME = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-// Simple spaced repetition algorithm based on SM-2
-function calculateNextReview(
-  currentInterval: number,
-  easinessFactor: number,
-  quality: number // 0-5 scale (0: complete blackout, 5: perfect response)
-) {
-  const newEasinessFactor = Math.max(
-    1.3,
-    easinessFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-  );
+const QUESTION_PROMPT_TEMPLATE = (noteContent: string) => `You are a kind professor who is an expert in their field. A few days ago you were working with a student in class and they drew the following conclusion: ${noteContent}
 
-  let newInterval;
-  if (quality < 3) {
-    newInterval = 1; // Reset to 1 day if quality is poor
-  } else {
-    if (currentInterval === 1) {
-      newInterval = 6; // First successful review -> 6 days
-    } else {
-      newInterval = Math.round(currentInterval * newEasinessFactor);
-    }
-  }
+It's a few days later and we'd like to check if they still remember the conclusion they drew. Can you provide a question that their conclusion might've been the answer to?
 
-  return {
-    newInterval,
-    newEasinessFactor: Math.round(newEasinessFactor * 100) / 100,
-  };
-}
+The ultimate goal is to see if the user can explain the underlying concept in their conclusion
+
+Please return the question only with no other text`;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { questionId, userResponse, quality } = body;
+    const { noteId } = body;
 
-    if (!questionId || quality === undefined) {
-      return NextResponse.json(
-        { error: "Question ID and quality rating are required" },
-        { status: 400 }
-      );
+    if (!noteId) {
+      return NextResponse.json({ error: 'noteId is required' }, { status: 400 });
     }
 
-    // Get current question data
-    const [currentQuestion] = await db
+    const [note] = await db
       .select()
-      .from(questions)
-      .where(eq(questions.id, questionId));
+      .from(notes)
+      .where(eq(notes.id, noteId))
+      .limit(1);
 
-    if (!currentQuestion) {
-      return NextResponse.json(
-        { error: "Question not found" },
-        { status: 404 }
-      );
+    if (!note) {
+      return NextResponse.json({ error: 'Note not found' }, { status: 404 });
     }
 
-    // Calculate next review parameters
-    const { newInterval, newEasinessFactor } = calculateNextReview(
-      currentQuestion.currentInterval || 1,
-      parseFloat(currentQuestion.easinessFactor || "2.50"),
-      quality
+    const prompt = QUESTION_PROMPT_TEMPLATE(
+      note.explanation ? `${note.content}\n\nAdditional context: ${note.explanation}` : note.content
     );
 
-    // Calculate next review date
-    const nextReviewDate = new Date();
-    nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+    const completion = await groq.chat.completions.create({
+      model: MODEL_NAME,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
 
-    const isCorrect = quality >= 3;
+    const questionText = completion.choices[0]?.message?.content?.trim();
 
-    // Create review record
-    const reviewData: ReviewInsert = {
-      questionId: questionId,
-      noteId: currentQuestion.noteId,
-      userResponse: userResponse,
-      correct: isCorrect,
-      previousInterval: currentQuestion.currentInterval,
-      newInterval: newInterval,
-      previousEasinessFactor: parseFloat(
-        currentQuestion.easinessFactor || "2.50"
-      ).toString(),
-      newEasinessFactor: newEasinessFactor.toString(),
-    };
+    if (!questionText) {
+      return NextResponse.json(
+        { error: 'Failed to generate question' },
+        { status: 500 }
+      );
+    }
 
-    const [newReview] = await db.insert(reviews).values(reviewData).returning();
-
-    // Update question with new spaced repetition data
-    await db
-      .update(questions)
-      .set({
-        nextReviewDate: nextReviewDate.toISOString(),
-        currentInterval: newInterval,
-        easinessFactor: newEasinessFactor.toString(),
-        reviewCount: (currentQuestion.reviewCount || 0) + 1,
-        consecutiveCorrect: isCorrect
-          ? (currentQuestion.consecutiveCorrect || 0) + 1
-          : 0,
+    const [newReview] = await db
+      .insert(reviews)
+      .values({
+        noteId,
+        questionText,
+        modelName: MODEL_NAME,
+        generationPrompt: prompt,
       })
-      .where(eq(questions.id, questionId));
+      .returning({ id: reviews.id, questionText: reviews.questionText });
 
     return NextResponse.json({
-      review: newReview,
-      nextReviewDate: nextReviewDate.toISOString(),
-      newInterval,
-      newEasinessFactor,
-      success: true,
+      reviewId: newReview.id,
+      question: newReview.questionText,
     });
   } catch (error) {
-    console.error("Error submitting review:", error);
+    console.error('Error starting review session:', error);
     return NextResponse.json(
-      { error: "Failed to submit review" },
+      { error: 'Failed to start review session' },
       { status: 500 }
     );
   }
