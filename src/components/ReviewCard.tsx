@@ -19,6 +19,11 @@ import {
   Brain,
   Loader2,
   Sparkles,
+  X,
+  Maximize2,
+  Minimize2,
+  Send,
+  MessageCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -29,6 +34,11 @@ type Note = {
 };
 
 type Stage = "idle" | "loading" | "question" | "evaluation";
+
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export default function ReviewCard() {
   const [answer, setAnswer] = useState("");
@@ -51,6 +61,16 @@ export default function ReviewCard() {
   } | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [evaluationAnimationKey, setEvaluationAnimationKey] = useState(0);
+
+  // Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [followUpQuestion, setFollowUpQuestion] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [currentReviewIdForChat, setCurrentReviewIdForChat] = useState<
+    number | null
+  >(null);
 
   // Restore persisted state on mount
   useEffect(() => {
@@ -97,12 +117,16 @@ export default function ReviewCard() {
   }, []);
 
   const resetReviewState = useCallback((nextStage: Stage = "idle") => {
+    console.log("resetReviewState called, clearing currentReviewIdForChat");
     setQuestionText("");
     setReviewId(null);
     setEvaluation(null);
     setStatusMessage(null);
     setStage(nextStage);
     setAnswer("");
+    setCurrentReviewIdForChat(null);
+    setChatMessages([]);
+    setIsSidebarOpen(false);
   }, []);
 
   const fetchDueNote = useCallback(async () => {
@@ -225,6 +249,11 @@ export default function ReviewCard() {
         setCurrentNote(targetNote);
         setQuestionText(result.question);
         setReviewId(result.reviewId);
+        console.log(
+          "Setting currentReviewIdForChat in startReviewSession, reviewId:",
+          result.reviewId
+        );
+        setCurrentReviewIdForChat(result.reviewId);
         setQuestionAnimationKey((prev) => prev + 1);
         setStage("question");
         setStatusMessage(null);
@@ -269,7 +298,13 @@ export default function ReviewCard() {
         }
 
         const result = await response.json();
-        setReviewId(null);
+
+        // Keep reviewId for potential follow-up questions
+        console.log(
+          "Setting currentReviewIdForChat in finalizeReview, reviewId:",
+          reviewId
+        );
+        setCurrentReviewIdForChat(reviewId);
 
         if (!options?.suppressFeedback) {
           const feedback = result?.evaluation?.feedback;
@@ -358,6 +393,104 @@ export default function ReviewCard() {
       setIsDeletingNote(false);
     }
   }, [currentNote, goToNextQuestion, isDeletingNote, isLoadingQuestion]);
+
+  const handleOpenSidebar = useCallback(() => {
+    console.log(
+      "Opening sidebar, currentReviewIdForChat:",
+      currentReviewIdForChat
+    );
+    setIsSidebarOpen(true);
+  }, [currentReviewIdForChat]);
+
+  const handleCloseSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+  }, []);
+
+  const handleClearChat = useCallback(() => {
+    setChatMessages([]);
+    setFollowUpQuestion("");
+  }, []);
+
+  const handleToggleExpand = useCallback(() => {
+    setIsSidebarExpanded((prev) => !prev);
+  }, []);
+
+  const handleSendMessage = useCallback(async () => {
+    console.log("handleSendMessage called", {
+      followUpQuestion,
+      currentReviewIdForChat,
+      isSendingMessage,
+      chatMessagesLength: chatMessages.length,
+    });
+
+    if (
+      !followUpQuestion.trim() ||
+      !currentReviewIdForChat ||
+      isSendingMessage
+    ) {
+      console.log("Early return from handleSendMessage");
+      return;
+    }
+
+    const userMessage = followUpQuestion.trim();
+    setFollowUpQuestion("");
+
+    // Add user message to chat
+    const newUserMessage: ChatMessage = {
+      role: "user",
+      content: userMessage,
+    };
+    setChatMessages((prev) => [...prev, newUserMessage]);
+
+    setIsSendingMessage(true);
+    try {
+      console.log("Sending message to API...");
+      const response = await fetch(
+        `/api/reviews/${currentReviewIdForChat}/followup`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: userMessage,
+            conversationHistory: chatMessages,
+          }),
+        }
+      );
+
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to send message", errorData);
+        setToastMessage("Failed to send message. Please try again.");
+        setTimeout(() => setToastMessage(null), 3000);
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Result:", result);
+
+      // Add assistant message to chat
+      const newAssistantMessage: ChatMessage = {
+        role: "assistant",
+        content: result.message,
+      };
+      setChatMessages((prev) => [...prev, newAssistantMessage]);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setToastMessage("Failed to send message. Please try again.");
+      setTimeout(() => setToastMessage(null), 3000);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }, [
+    followUpQuestion,
+    currentReviewIdForChat,
+    chatMessages,
+    isSendingMessage,
+  ]);
 
   const primaryLabel = useMemo(() => {
     if (currentView === "add") {
@@ -640,7 +773,14 @@ export default function ReviewCard() {
           )}
 
           {currentView === "review" && stage === "evaluation" && evaluation && (
-            <div className="max-w-3xl mx-auto flex justify-center">
+            <div className="max-w-3xl mx-auto flex justify-center gap-4">
+              <button
+                onClick={handleOpenSidebar}
+                className="group flex items-center gap-2 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20 text-sm uppercase tracking-[0.2em]"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Ask a question
+              </button>
               <button
                 onClick={handleNextQuestion}
                 className="group flex items-center gap-2 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20 text-sm uppercase tracking-[0.2em]"
@@ -681,6 +821,142 @@ export default function ReviewCard() {
           </div>
         </motion.div>
       )}
+
+      {/* Sidebar */}
+      <motion.div
+        initial={{ x: "100%" }}
+        animate={{ x: isSidebarOpen ? 0 : "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 h-screen z-50 flex"
+        style={{
+          width: isSidebarExpanded ? "600px" : "400px",
+          transition: "width 0.3s ease-in-out",
+        }}
+      >
+        <div
+          className="w-full h-full flex flex-col border-l border-white/10 shadow-2xl"
+          style={{
+            backgroundColor: "rgba(255, 255, 255, 0.04)",
+            backdropFilter: "blur(30px) saturate(120%)",
+            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-white/60" />
+              <h3 className="text-white font-light text-lg">Assistant</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleExpand}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                title={isSidebarExpanded ? "Minimize" : "Expand"}
+              >
+                {isSidebarExpanded ? (
+                  <Minimize2 className="w-4 h-4 text-white/70" />
+                ) : (
+                  <Maximize2 className="w-4 h-4 text-white/70" />
+                )}
+              </button>
+              <button
+                onClick={handleClearChat}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                title="Clear chat"
+              >
+                <Trash2 className="w-4 h-4 text-white/70" />
+              </button>
+              <button
+                onClick={handleCloseSidebar}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4 text-white/70" />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {chatMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-white/40 text-center">
+                <MessageCircle className="w-12 h-12 mb-4" />
+                <p className="text-sm">Ask me anything about this review</p>
+              </div>
+            ) : (
+              chatMessages.map((msg, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className={`flex ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-xl p-4 ${
+                      msg.role === "user"
+                        ? "bg-white/15 text-white"
+                        : "bg-white/5 text-white/90"
+                    }`}
+                    style={{
+                      fontFamily: "var(--font-playfair), Georgia, serif",
+                      fontWeight: 300,
+                    }}
+                  >
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </p>
+                  </div>
+                </motion.div>
+              ))
+            )}
+            {isSendingMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-start"
+              >
+                <div className="max-w-[80%] rounded-xl p-4 bg-white/5">
+                  <Loader2 className="w-5 h-5 text-white/60 animate-spin" />
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Input */}
+          <div className="p-4 border-t border-white/10">
+            <div className="relative">
+              <input
+                type="text"
+                value={followUpQuestion}
+                onChange={(e) => setFollowUpQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Ask a question..."
+                disabled={isSendingMessage}
+                className="w-full bg-white/5 text-white rounded-xl px-4 py-3 pr-12 placeholder:text-white/40 text-sm border border-white/10 focus:outline-none focus:border-white/20 transition-colors"
+                style={{
+                  fontFamily: "var(--font-playfair), Georgia, serif",
+                  fontWeight: 300,
+                }}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!followUpQuestion.trim() || isSendingMessage}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                <Send className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
