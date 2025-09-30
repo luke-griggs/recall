@@ -24,6 +24,9 @@ import {
   Minimize2,
   Send,
   MessageCircle,
+  Hammer,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -35,9 +38,24 @@ type Note = {
 
 type Stage = "idle" | "loading" | "question" | "evaluation";
 
+type ContentBlock = {
+  type: "text" | "tool_use";
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: {
+    content: string;
+  };
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
-  content: string;
+  content: string | ContentBlock[];
+  toolResult?: {
+    noteId: number;
+    content: string;
+  };
+  isStreaming?: boolean;
 };
 
 export default function ReviewCard() {
@@ -46,7 +64,6 @@ export default function ReviewCard() {
   const [currentView, setCurrentView] = useState<"review" | "add">("review");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
   const [reviewId, setReviewId] = useState<number | null>(null);
   const [questionText, setQuestionText] = useState("");
@@ -71,6 +88,7 @@ export default function ReviewCard() {
   const [currentReviewIdForChat, setCurrentReviewIdForChat] = useState<
     number | null
   >(null);
+  const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
 
   // Restore persisted state on mount
   useEffect(() => {
@@ -107,17 +125,7 @@ export default function ReviewCard() {
     } catch {}
   }, [noteContent]);
 
-  // Update time every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
   const resetReviewState = useCallback((nextStage: Stage = "idle") => {
-    console.log("resetReviewState called, clearing currentReviewIdForChat");
     setQuestionText("");
     setReviewId(null);
     setEvaluation(null);
@@ -249,10 +257,6 @@ export default function ReviewCard() {
         setCurrentNote(targetNote);
         setQuestionText(result.question);
         setReviewId(result.reviewId);
-        console.log(
-          "Setting currentReviewIdForChat in startReviewSession, reviewId:",
-          result.reviewId
-        );
         setCurrentReviewIdForChat(result.reviewId);
         setQuestionAnimationKey((prev) => prev + 1);
         setStage("question");
@@ -300,10 +304,6 @@ export default function ReviewCard() {
         const result = await response.json();
 
         // Keep reviewId for potential follow-up questions
-        console.log(
-          "Setting currentReviewIdForChat in finalizeReview, reviewId:",
-          reviewId
-        );
         setCurrentReviewIdForChat(reviewId);
 
         if (!options?.suppressFeedback) {
@@ -395,12 +395,8 @@ export default function ReviewCard() {
   }, [currentNote, goToNextQuestion, isDeletingNote, isLoadingQuestion]);
 
   const handleOpenSidebar = useCallback(() => {
-    console.log(
-      "Opening sidebar, currentReviewIdForChat:",
-      currentReviewIdForChat
-    );
     setIsSidebarOpen(true);
-  }, [currentReviewIdForChat]);
+  }, []);
 
   const handleCloseSidebar = useCallback(() => {
     setIsSidebarOpen(false);
@@ -416,19 +412,11 @@ export default function ReviewCard() {
   }, []);
 
   const handleSendMessage = useCallback(async () => {
-    console.log("handleSendMessage called", {
-      followUpQuestion,
-      currentReviewIdForChat,
-      isSendingMessage,
-      chatMessagesLength: chatMessages.length,
-    });
-
     if (
       !followUpQuestion.trim() ||
       !currentReviewIdForChat ||
       isSendingMessage
     ) {
-      console.log("Early return from handleSendMessage");
       return;
     }
 
@@ -442,9 +430,17 @@ export default function ReviewCard() {
     };
     setChatMessages((prev) => [...prev, newUserMessage]);
 
+    // Add placeholder for streaming assistant message
+    const streamingMessageIndex = chatMessages.length + 1;
+    const streamingMessage: ChatMessage = {
+      role: "assistant",
+      content: [],
+      isStreaming: true,
+    };
+    setChatMessages((prev) => [...prev, streamingMessage]);
+
     setIsSendingMessage(true);
     try {
-      console.log("Sending message to API...");
       const response = await fetch(
         `/api/reviews/${currentReviewIdForChat}/followup`,
         {
@@ -459,29 +455,106 @@ export default function ReviewCard() {
         }
       );
 
-      console.log("Response status:", response.status);
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to send message", errorData);
+        console.error("Failed to send message");
         setToastMessage("Failed to send message. Please try again.");
         setTimeout(() => setToastMessage(null), 3000);
+        setChatMessages((prev) => prev.slice(0, -1)); // Remove streaming message
         return;
       }
 
-      const result = await response.json();
-      console.log("Result:", result);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let currentTextBlock = "";
 
-      // Add assistant message to chat
-      const newAssistantMessage: ChatMessage = {
-        role: "assistant",
-        content: result.message,
-      };
-      setChatMessages((prev) => [...prev, newAssistantMessage]);
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "text_start") {
+                currentTextBlock = "";
+              } else if (data.type === "text_delta") {
+                currentTextBlock += data.text;
+                setChatMessages((prev) => {
+                  const updated = [...prev];
+                  const msg = updated[streamingMessageIndex];
+                  const content = Array.isArray(msg.content)
+                    ? [...msg.content]
+                    : [];
+
+                  // Update or add text block
+                  const textBlockIndex = content.findIndex(
+                    (b) => b.type === "text"
+                  );
+                  if (textBlockIndex >= 0) {
+                    content[textBlockIndex] = {
+                      type: "text",
+                      text: currentTextBlock,
+                    };
+                  } else {
+                    content.push({ type: "text", text: currentTextBlock });
+                  }
+
+                  updated[streamingMessageIndex] = { ...msg, content };
+                  return updated;
+                });
+              } else if (data.type === "tool_use_start") {
+                const toolUseBlock: ContentBlock = {
+                  type: "tool_use",
+                  name: data.name,
+                  id: data.id,
+                };
+                setChatMessages((prev) => {
+                  const updated = [...prev];
+                  const msg = updated[streamingMessageIndex];
+                  const content = Array.isArray(msg.content)
+                    ? [...msg.content]
+                    : [];
+                  content.push(toolUseBlock);
+                  updated[streamingMessageIndex] = { ...msg, content };
+                  return updated;
+                });
+              } else if (data.type === "tool_result") {
+                setChatMessages((prev) => {
+                  const updated = [...prev];
+                  const msg = updated[streamingMessageIndex];
+                  updated[streamingMessageIndex] = {
+                    ...msg,
+                    toolResult: {
+                      noteId: data.noteId,
+                      content: data.content,
+                    },
+                  };
+                  return updated;
+                });
+              } else if (data.type === "done") {
+                setChatMessages((prev) => {
+                  const updated = [...prev];
+                  const msg = updated[streamingMessageIndex];
+                  updated[streamingMessageIndex] = {
+                    ...msg,
+                    isStreaming: false,
+                  };
+                  return updated;
+                });
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       setToastMessage("Failed to send message. Please try again.");
       setTimeout(() => setToastMessage(null), 3000);
+      setChatMessages((prev) => prev.slice(0, -1)); // Remove streaming message
     } finally {
       setIsSendingMessage(false);
     }
@@ -783,7 +856,7 @@ export default function ReviewCard() {
               </button>
               <button
                 onClick={handleNextQuestion}
-                className="group flex items-center gap-2 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors border border-white/20 text-sm uppercase tracking-[0.2em]"
+                className="group flex items-center gap-2 px-6 py-3 bg-white/15 hover:bg-white/25 rounded-full text-white font-light transition-colors text-sm uppercase tracking-[0.2em]"
               >
                 Next question
                 <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
@@ -884,33 +957,123 @@ export default function ReviewCard() {
                 <p className="text-sm">Ask me anything about this review</p>
               </div>
             ) : (
-              chatMessages.map((msg, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className={`flex ${
-                    msg.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-xl p-4 ${
-                      msg.role === "user"
-                        ? "bg-white/15 text-white"
-                        : "bg-white/5 text-white/90"
+              chatMessages.map((msg, index) => {
+                const isUser = msg.role === "user";
+                const contentBlocks =
+                  typeof msg.content === "string"
+                    ? [{ type: "text" as const, text: msg.content }]
+                    : msg.content;
+
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex flex-col gap-2 ${
+                      isUser ? "items-end" : "items-center"
                     }`}
-                    style={{
-                      fontFamily: "var(--font-playfair), Georgia, serif",
-                      fontWeight: 300,
-                    }}
                   >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
-                    </p>
-                  </div>
-                </motion.div>
-              ))
+                    {contentBlocks.map((block, blockIndex) => {
+                      if (block.type === "text" && block.text) {
+                        return (
+                          <div
+                            key={blockIndex}
+                            className={`max-w-[80%] rounded-xl p-4 ${
+                              isUser
+                                ? "bg-white/15 text-white"
+                                : "bg-white/5 text-white/90"
+                            }`}
+                            style={{
+                              fontFamily:
+                                "var(--font-playfair), Georgia, serif",
+                              fontWeight: 300,
+                            }}
+                          >
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                              {block.text}
+                              {msg.isStreaming && (
+                                <span className="inline-block w-1 h-4 ml-1 bg-white/60 animate-pulse" />
+                              )}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (
+                        block.type === "tool_use" &&
+                        block.name === "add_note"
+                      ) {
+                        const noteId = msg.toolResult?.noteId || index;
+                        const isExpanded = expandedNotes.has(noteId);
+
+                        return (
+                          <div
+                            key={blockIndex}
+                            className="w-[80%] bg-white/8 rounded-lg border border-white/10 overflow-hidden"
+                          >
+                            <div className="flex items-center justify-between px-3 py-2 text-white/70 text-xs">
+                              <div className="flex items-center gap-2">
+                                <Hammer className="w-3.5 h-3.5" />
+                                <span className="font-medium">
+                                  Used add_note
+                                </span>
+                                <div className="w-px h-4 bg-white/20 mx-1" />
+                                <Check className="w-3.5 h-3.5 text-green-400" />
+                                <span className="text-white/50">
+                                  Note saved
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setExpandedNotes((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(noteId)) {
+                                      next.delete(noteId);
+                                    } else {
+                                      next.add(noteId);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="p-1 hover:bg-white/10 rounded transition-colors"
+                              >
+                                <ChevronDown
+                                  className={`w-4 h-4 text-white/50 transition-transform ${
+                                    isExpanded ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            <motion.div
+                              initial={false}
+                              animate={{
+                                height: isExpanded ? "auto" : 0,
+                                opacity: isExpanded ? 1 : 0,
+                              }}
+                              transition={{ duration: 0.2, ease: "easeInOut" }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-3 pb-3 pt-1 border-t border-white/10">
+                                <div className="text-xs text-white/60 mb-1">
+                                  Note:
+                                </div>
+                                <div className="text-sm text-white/90 leading-relaxed">
+                                  {msg.toolResult?.content ||
+                                    block.input?.content}
+                                </div>
+                              </div>
+                            </motion.div>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })}
+                  </motion.div>
+                );
+              })
             )}
             {isSendingMessage && (
               <motion.div
