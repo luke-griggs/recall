@@ -1,0 +1,1 @@
+ALTER TABLE "notes" ADD COLUMN "category" varchar(100);

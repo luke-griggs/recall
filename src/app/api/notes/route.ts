@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db, notes } from '@/db';
+import { NextRequest, NextResponse } from "next/server";
+import { db, notes } from "@/db";
+import { categorizeNote } from "@/lib/categorize";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,10 +9,13 @@ export async function POST(request: NextRequest) {
 
     if (!content) {
       return NextResponse.json(
-        { error: 'Content is required' },
+        { error: "Content is required" },
         { status: 400 }
       );
     }
+
+    // Categorize the note using Groq
+    const category = await categorizeNote(content);
 
     const [newNote] = await db
       .insert(notes)
@@ -20,6 +24,7 @@ export async function POST(request: NextRequest) {
         explanation,
         tags,
         difficultyEstimate,
+        category,
       })
       .returning();
 
@@ -28,9 +33,9 @@ export async function POST(request: NextRequest) {
       success: true,
     });
   } catch (error) {
-    console.error('Error creating note:', error);
+    console.error("Error creating note:", error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
