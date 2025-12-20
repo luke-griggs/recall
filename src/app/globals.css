@@ -80,3 +80,199 @@
     min-height: 100vh;
   }
 }
+
+/* Brain page glow effects */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.glow-orb {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Custom scrollbar for brain page */
+.brain-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.brain-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.brain-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.brain-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Brain markdown styles - Clean, Claude-like typography */
+.brain-markdown {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.brain-markdown > *:first-child {
+  margin-top: 0 !important;
+}
+
+.brain-markdown > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.brain-markdown h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: white;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  line-height: 1.3;
+}
+
+.brain-markdown h2 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: white;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.brain-markdown h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: white;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.brain-markdown h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.brain-markdown p {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.brain-markdown strong {
+  font-weight: 600;
+  color: white;
+}
+
+.brain-markdown em {
+  font-style: italic;
+}
+
+.brain-markdown code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 0.375rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.brain-markdown pre {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+}
+
+.brain-markdown pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.brain-markdown ul {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.brain-markdown ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+}
+
+.brain-markdown li {
+  margin: 0.375rem 0;
+  padding-left: 0.25rem;
+}
+
+.brain-markdown li > ul,
+.brain-markdown li > ol {
+  margin: 0.5rem 0;
+}
+
+.brain-markdown a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+  transition: text-decoration-color 0.2s;
+}
+
+.brain-markdown a:hover {
+  color: white;
+  text-decoration-color: rgba(255, 255, 255, 0.8);
+}
+
+.brain-markdown blockquote {
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  padding-left: 1rem;
+  margin: 1.25rem 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.brain-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.9375rem;
+}
+
+.brain-markdown th,
+.brain-markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+}
+
+.brain-markdown th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  color: white;
+}
+
+.brain-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 2rem 0;
+}
+
+/* Task lists */
+.brain-markdown input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: white;
+}

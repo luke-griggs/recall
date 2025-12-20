@@ -8,8 +8,36 @@ import {
   integer,
   numeric,
   boolean,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+// Chat/Brain tables
+export const conversations = pgTable("conversations", {
+  id: uuid().primaryKey().defaultRandom(),
+  title: varchar({ length: 255 }).default("New Chat"),
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+  updatedAt: timestamp("updated_at", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: uuid().primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id")
+    .references(() => conversations.id, { onDelete: "cascade" })
+    .notNull(),
+  role: varchar({ length: 20 }).notNull(), // 'user' or 'assistant'
+  content: text().notNull(),
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+});
 
 export const notes = pgTable(
   "notes",
