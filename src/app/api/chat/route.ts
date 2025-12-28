@@ -1,9 +1,35 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, messages, conversations } from "@/db";
-import { eq } from "drizzle-orm";
+import { db, messages, conversations, memory } from "@/db";
+import { eq, desc } from "drizzle-orm";
 
 const anthropic = new Anthropic();
+
+// Build system prompt with memory context
+async function buildSystemPrompt(): Promise<string | undefined> {
+  try {
+    const [currentMemory] = await db
+      .select()
+      .from(memory)
+      .orderBy(desc(memory.lastUpdatedAt))
+      .limit(1);
+
+    if (!currentMemory?.content) {
+      return undefined;
+    }
+
+    return `
+
+<user_context>
+${currentMemory.content}
+</user_context>
+
+Use this context naturally in your responses when relevant. Don't explicitly mention that you have this memory unless asked`;
+  } catch (error) {
+    console.error("Error building system prompt:", error);
+    return undefined;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,6 +62,9 @@ export async function POST(request: NextRequest) {
       content: msg.content,
     }));
 
+    // Build system prompt with memory context
+    const systemPrompt = await buildSystemPrompt();
+
     // Create streaming response
     const encoder = new TextEncoder();
     let fullResponse = "";
@@ -46,8 +75,10 @@ export async function POST(request: NextRequest) {
           const response = await anthropic.messages.create({
             model: "claude-sonnet-4-5-20250929",
             max_tokens: 4096,
+            system: systemPrompt,
             messages: anthropicMessages,
             stream: true,
+            temperature: 0.6,
           });
 
           for await (const event of response) {

@@ -10,7 +10,9 @@ import {
   Menu,
   X,
   Sparkles,
+  Brain,
 } from "lucide-react";
+import Link from "next/link";
 import { Streamdown } from "streamdown";
 
 interface Message {
@@ -299,20 +301,29 @@ export default function BrainPage() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center gap-4 px-4 py-3 border-b border-white/5">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+        <header className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+            >
+              {isSidebarOpen ? (
+                <X className="w-5 h-5 text-white/70" />
+              ) : (
+                <Menu className="w-5 h-5 text-white/70" />
+              )}
+            </button>
+            <h1 className="text-lg font-medium text-white/90">
+              {currentConversation?.title || "Brain"}
+            </h1>
+          </div>
+          <Link
+            href="/memory"
+            className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 rounded-lg transition-colors text-white/60 hover:text-white/90"
           >
-            {isSidebarOpen ? (
-              <X className="w-5 h-5 text-white/70" />
-            ) : (
-              <Menu className="w-5 h-5 text-white/70" />
-            )}
-          </button>
-          <h1 className="text-lg font-medium text-white/90">
-            {currentConversation?.title || "Brain"}
-          </h1>
+            <Brain className="w-4 h-4" />
+            <span className="text-sm">Memory</span>
+          </Link>
         </header>
 
         {/* Messages Area */}

@@ -114,3 +114,20 @@ export const reviews = pgTable(
   },
   () => []
 );
+
+// Memory system - stores a single cohesive summary about the user
+export const memory = pgTable("memory", {
+  id: uuid().primaryKey().defaultRandom(),
+  // The full memory summary (markdown format, similar to Claude's memory)
+  content: text().notNull(),
+  // Metadata
+  lastUpdatedAt: timestamp("last_updated_at", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+  // Track the last conversation processed for incremental updates
+  lastProcessedAt: timestamp("last_processed_at", {
+    withTimezone: true,
+    mode: "string",
+  }),
+});

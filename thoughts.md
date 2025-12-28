@@ -15,10 +15,10 @@ some things that I would change if I could
 
 - helper in a sidebar for me to ask quick questions
 
-
 - Initial interface is just a voice input 
 - Journal associated with that topic that contains transcripts/typed explanations
 
+- general memory and memory for each umbrella topic
 
 
 
