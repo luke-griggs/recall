@@ -13,7 +13,11 @@ import {
   Brain,
 } from "lucide-react";
 import Link from "next/link";
-import { Streamdown } from "streamdown";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface Message {
   id: string;
@@ -375,7 +379,12 @@ export default function BrainPage() {
                       </div>
                       {/* Assistant message - no box */}
                       <div className="flex-1 min-w-0 brain-markdown">
-                        <Streamdown>{msg.content}</Streamdown>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   )}
@@ -396,7 +405,12 @@ export default function BrainPage() {
                     </div>
                     {/* Streaming message - no box */}
                     <div className="flex-1 min-w-0 brain-markdown">
-                      <Streamdown>{streamingMessage}</Streamdown>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {streamingMessage}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </motion.div>

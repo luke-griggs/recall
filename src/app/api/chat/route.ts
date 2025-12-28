@@ -24,7 +24,17 @@ async function buildSystemPrompt(): Promise<string | undefined> {
 ${currentMemory.content}
 </user_context>
 
-Use this context naturally in your responses when relevant. Don't explicitly mention that you have this memory unless asked`;
+Use this context naturally in your responses when relevant. Don't explicitly mention that you have this memory unless asked.
+
+For mathematical expressions, use LaTeX:
+- Inline math: $...$ (e.g., "the function $f(x)$ is...")
+- Display math: put $$ on separate lines like this:
+
+$$
+\\int_a^b f(x)\\,dx = \\lim_{n \\to \\infty} \\sum_{i=1}^n f(x_i^*) \\Delta x
+$$
+
+Display math must have $$ on its own line, with the equation on the next line(s), and closing $$ on its own line. This ensures proper centering and large symbols.`;
   } catch (error) {
     console.error("Error building system prompt:", error);
     return undefined;

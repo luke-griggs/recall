@@ -52,9 +52,13 @@ export async function PUT(request: NextRequest) {
 
       return NextResponse.json(updated);
     } else {
+      const now = new Date().toISOString();
       const [newMemory] = await db
         .insert(memory)
-        .values({ content })
+        .values({
+          content,
+          lastUpdatedAt: now,
+        })
         .returning();
 
       return NextResponse.json(newMemory, { status: 201 });

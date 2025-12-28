@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, memory, conversations, messages } from "@/db";
-import { desc, eq, gt, and, isNotNull } from "drizzle-orm";
+import { desc, eq, gt } from "drizzle-orm";
 
 const anthropic = new Anthropic();
 
@@ -177,6 +177,7 @@ ${conversationSummaries || "No conversations to process."}
         .insert(memory)
         .values({
           content: updatedContent,
+          lastUpdatedAt: now,
           lastProcessedAt: now,
         })
         .returning();

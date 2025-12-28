@@ -276,3 +276,24 @@
   margin-right: 0.5rem;
   accent-color: white;
 }
+
+/* KaTeX math - color override for dark theme */
+.brain-markdown .katex {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Display math - centered with proper spacing */
+.brain-markdown .katex-display {
+  display: block !important;
+  width: 100% !important;
+  margin: 1.5rem 0 !important;
+  text-align: center !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.brain-markdown .katex-display > .katex {
+  display: inline-block;
+  text-align: center;
+  font-size: 1.21em;
+}

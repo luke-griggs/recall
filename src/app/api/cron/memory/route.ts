@@ -187,6 +187,7 @@ ${conversationSummaries || "No conversations to process."}
     } else {
       await db.insert(memory).values({
         content: updatedContent,
+        lastUpdatedAt: now,
         lastProcessedAt: now,
       });
     }
